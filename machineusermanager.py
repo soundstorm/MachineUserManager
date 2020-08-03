@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
+import logging
 from pn532.api import PN532
 import lcdlib
 import time
@@ -11,13 +12,13 @@ import callbacks
 try:
 	import user_callbacks as callbacks
 except ImportError:
-	print("No user_callbacks available, using defaults")
+	logging.info('No user_callbacks available, using defaults')
 
 from config import *
 try:
 	from user_config import *
 except ImportError:
-	print("No user_config available, using defaults")
+	logging.info('No user_config available, using defaults')
 
 lang = import_module('languages.{}'.format(UI_LANGUAGE))
 db_connector = import_module('dbconnectors.db_{}'.format(DB_TYPE))
@@ -60,34 +61,37 @@ def INT_on(channel):
 
 
 # SETUP GPIOS
+logging.debug('Setting up GPIOs')
 GPIO.setwarnings(False) # May yield warnings on restart otherwise
 GPIO.setup(MACHINE_PROT, GPIO.OUT)
 try:
 	GPIO.setup(LED_R, GPIO.OUT)
 except NameError:
-	pass # No GPIO defined for red LED
+	logging.info('No GPIO defined for LED_R')
 try:
 	GPIO.setup(LED_Y, GPIO.OUT)
 except:
-	pass # No GPIO defined for yellow LED
+	logging.info('No GPIO defined for LED_Y')
 try:
 	GPIO.setup(LED_G, GPIO.OUT)
 except NameError:
-	pass # No GPIO defined for green LED
+	logging.info('No GPIO defined for LED_G')
 try:
 	GPIO.setup(ALARM, GPIO.OUT)
 except NameError:
-	pass # No GPIO defined for alarm
+	logging.info('No GPIO defined for ALARM')
 try:
 	GPIO.setup(MACHINE_STATE, GPIO.IN, GPIO.PUD_UP)
 except NameError:
-	pass # No GPIO defined for machine state
-try
+	logging.info('No GPIO defined for MACHINE_STATE')
+try:
 	GPIO.setup(MACHINE_ON, GPIO.IN, GPIO.PUD_UP)
 except NameError:
-	pass # No GPIO defined for machine power
+	logging.info('No GPIO defined for MACHINE_ON')
 GPIO.setup(BTN_CONFIRM, GPIO.IN, GPIO.PUD_UP)
 GPIO.setup(BTN_CANCEL, GPIO.IN, GPIO.PUD_UP)
+
+logging.debug('Configuring interrupt routines')
 
 GPIO.add_event_detect(
 	BTN_CONFIRM,
@@ -105,11 +109,11 @@ GPIO.add_event_detect(
 try:
 	GPIO.add_event_detect(MACHINE_STATE, GPIO.BOTH, callback=INT_state, bouncetime=300)
 except NameError:
-	pass # No GPIO defined for machine state
+	logging.info('No GPIO defined for MACHINE_STATE, not setting up interrupt')
 try:
 	GPIO.add_event_detect(MACHINE_ON, GPIO.BOTH, callback=INT_on, bouncetime=300)
 except NameError:
-	pass # No GPIO defined for machine power
+	logging.info('No GPIO defined for MACHINE_ON, not setting up interrupt')
 
 # Initial state
 try:
@@ -124,14 +128,14 @@ except NameError:
 uid = 0
 credit = 0
 time_remaining = 0
-username = "OVERRRIDE"
+username = 'OVERRRIDE'
 job_started = 0
 last_state_change = 0
 job_active = False
 warning_sent = False
 try:
 	if OVERRIDE:
-		print("Override mode active")
+		logging.info('Override mode active')
 except NameError:
 	OVERRIDE = False
 
@@ -143,28 +147,37 @@ def set_red_led(state):
 	try:
 		GPIO.output(LED_R, state != INVERT_LEDS)
 	except NameError:
-		pass # No GPIO defined for red LED
+		logging.info('No pin defined for LED_R or INVERT_LEDs not set')
+	except Exception as e:
+		logging.exception('Error while setting pin LED_R')
 
 def set_yellow_led(state):
 	try:
 		GPIO.output(LED_Y, state != INVERT_LEDS)
 	except NameError:
-		pass # No GPIO defined for yellow LED
+		logging.info('No pin defined for LED_Y or INVERT_LEDs not set')
+	except Exception as e:
+		logging.exception('Error while setting pin LED_Y')
 
 def set_green_led(state):
 	try:
 		GPIO.output(LED_G, state != INVERT_LEDS)
 	except NameError:
-		pass # No GPIO defined for green LED
+		logging.info('No pin defined for LED_G or INVERT_LEDs not set')
+	except Exception:
+		logging.exception('Error while setting pin LED_G')
 
 def set_alarm(state):
 	try:
 		GPIO.output(ALARM, state != INVERT_ALARM)
 	except NameError:
-		pass # No GPIO defined for alarm
+		logging.info('No pin defined for ALARM or INVERT_ALARM not set')
+	except Exception:
+		logging.exception('Error while setting pin ALARM')
 
 def set_protection(state):
 	GPIO.output(MACHINE_PROT, state == INVERT_PROT)
+	# Don't fetch error here to avoid failing silently
 
 def prepare_reading_tag():
 	nfc.in_list_passive_target() #prepare reading on modified pn532 lib
@@ -202,14 +215,15 @@ def get_user_info():
 	try:
 		username, credit = db.get_user_info(uid)
 		return True
-	except:
-		return False # no such user
+	except ValueError:
+		logging.debug('No user found for uid %d', uid)
 
 def check_card():
 	global uid
 	# First check if card is only alias
 	alias_id = db.get_alias(uid)
 	if alias_id is not None:
+		logging.debug('Replacing aliased uid %d with main uid %d', uid, alias_id)
 		uid = alias_id # Replace current card uid by main uid
 	if not get_user_info():
 		return -1
@@ -284,55 +298,56 @@ while True:
 		display_text(lang.MACHINE_OFF)
 		while not machine_is_on:
 			time.sleep(.5)
+		logging.info('Machine switched on')
 		try:
 			callbacks.machine_turn_on()
 		except NameError:
-			pass # no callback defined
+			logging.debug('No callback defined for event machine_turn_on')
 		except TypeError:
-			print("Your callback may be malformed or outdated as probably the parameters mismatch")
+			logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 	while machine_is_on and not session_active and not OVERRIDE:
 		display_text(lang.MACHINE_READY)
 		lcd.backlight_on()
 		prepare_reading_tag()
-		id_tuple = None
 		read_uid = None
 		while machine_is_on and read_uid == 0:
 			read_uid = read_tag()
 		if read_uid is None:
 			break
-		convert_uid(id_tuple)
 		try:
 			callbacks.card_scan(uid)
 		except NameError:
-			pass # no callback defined
+			logging.debug('No callback defined for event card_scan')
 		except TypeError:
-			print("Your callback may be malformed or outdated as probably the parameters mismatch")
+			logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 		r = check_card()
 		if r < 0:
+			logging.info('Card %d is unknown', uid)
 			try:
 				callbacks.card_unknown(uid)
 			except NameError:
-				pass # no callback defined
+				logging.debug('No callback defined for event card_unknown')
 			except TypeError:
-				print("Your callback may be malformed or outdated as probably the parameters mismatch")
+				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 			display_text(lang.CARD_UNKNOWN)
 			countdown(TIMEOUT_SEC)
 		elif r == 0:
+			logging.info('Card %d is unauthorized to use this machine', uid)
 			try:
 				callbacks.card_unauthorized(uid, username)
 			except NameError:
-				pass # no callback defined
+				logging.debug('No callback defined for event card_unauthorized')
 			except TypeError:
-				print("Your callback may be malformed or outdated as probably the parameters mismatch")
+				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 			display_text(lang.CARD_UNAUTHORIZED)
 			countdown(TIMEOUT_SEC)
 		else:
 			try:
 				callbacks.card_authorized(uid, username)
 			except NameError:
-				pass # no callback defined
+				logging.debug('No callback defined for event card_authorized')
 			except TypeError:
-				print("Your callback may be malformed or outdated as probably the parameters mismatch")
+				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 			calculate_time_remaining()
 			if can_afford():
 				display_text(lang.LOGIN)
@@ -341,15 +356,16 @@ while True:
 				do_confirm = False
 				while machine_is_on:
 					if do_cancel:
+						logging.debug('Login was cancelled')
 						break
 					elif do_confirm:
 						if login():
 							try:
 								callbacks.user_login(uid, username)
 							except NameError:
-								pass # no callback defined
+								logging.debug('No callback defined for event user_login')
 							except TypeError:
-								print("Your callback may be malformed or outdated as probably the parameters mismatch")
+								logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 							if job_is_running:
 								if job_started == 0:
 									job_started = time.time()
@@ -357,11 +373,12 @@ while True:
 									try:
 										callbacks.job_resume(uid, username)
 									except NameError:
-										pass # no callback defined
+										logging.debug('No callback defined for event job_resume')
 									except TypeError:
-										print("Your callback may be malformed or outdated as probably the parameters mismatch")
+										logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 							else:
 								job_active = False
+							logging.info('Machine is unlocked by %d', uid)
 							unlock_machine()
 							last_state_change = time.time()
 							break
@@ -369,84 +386,91 @@ while True:
 							try:
 								callbacks.user_login_failed(uid, username)
 							except NameError:
-								pass # no callback defined
+								logging.debug('No callback defined for event user_login_failed')
 							except TypeError:
-								print("Your callback may be malformed or outdated as probably the parameters mismatch")
+								logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 							break
 							display_text(lang.LOGIN_FAILED)
 							countdown(TIMEOUT_SEC)
 					time.sleep(.3)
 			else:
+				logging.info('Credit of %d is too low to use machine', uid)
 				try:
 					callbacks.credit_too_low(uid, username)
 				except NameError:
-					pass # no callback defined
+					logging.debug('No callback defined for event credit_too_low')
 				except TypeError:
-					print("Your callback may be malformed or outdated as probably the parameters mismatch")
+					logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 				display_text(lang.CREDIT_TOO_LOW)
 				countdown(TIMEOUT_SEC)
 
 	# Reset button state to not logout user immediately again after potentially successful login
+	do_cancel = False
 	if OVERRIDE and machine_is_on:
 		unlock_machine()
-	do_cancel = False
 	while (session_active or OVERRIDE) and machine_is_on:
 		calculate_time_remaining() # update variables
 		display_text(lang.LOGGED_IN)
 		while ((session_valid_until >= time.time()) and session_active) or OVERRIDE:
 			if not OVERRIDE:
-				if   time_remaining <   2:
+				if   time_remaining < 2:
 					set_alarm(1)
 				elif time_remaining <= 10:
 					set_alarm(time.time() % 10 < 1)
 				else:
 					set_alarm(0)
-				set_red_led(time_remaining < 10) & ((time.time() % 2) < 1))
+				set_red_led((time_remaining < 10) & ((time.time() % 2) < 1))
 				if time_remaining < LOW_CREDIT_MINUTES:
 					if not warning_sent:
 						try:
 							callbacks.credit_low_warning(uid, username)
 						except NameError:
-							pass # no callback defined
+							logging.debug('No callback defined for event credit_low_warning')
 						except TypeError:
-							print("Your callback may be malformed or outdated as probably the parameters mismatch")
+							logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 						warning_sent = True
 				else:
 					warning_sent = False
 			set_yellow_led(job_active & ((time.time() % 2) < 1))
 
 			if not machine_is_on:
+				logging.debug('Logout due to turning off the machine')
 				logout()
 				try:
 					callbacks.machine_turn_off()
 				except NameError:
-					pass # no callback defined
+					logging.debug('No callback defined for event machine_turn_off')
 				except TypeError:
-					print("Your callback may be malformed or outdated as probably the parameters mismatch")
+					logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 			elif do_cancel and not OVERRIDE:
+				logging.debug('Manual logout triggered')
 				logout()
 				try:
-					callbacks.user_logout()
+					callbacks.user_logout(uid, username)
 				except NameError:
-					pass # no callback defined
+					logging.debug('No callback defined for event user_logout')
+				except TypeError:
+					logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 			elif job_active != job_is_running:
 				# Manual debouncing as the state signal may trigger when switching the machine off
 				if last_state_change + STATE_DEBOUNCE_TIME < time.time():
 					if not job_active:
+						logging.debug('Job started')
 						job_started = time.time()
 						try:
 							callbacks.job_start(uid, username)
 						except NameError:
-							pass # no callback defined
+							logging.debug('No callback defined for event job_start')
 						except TypeError:
-							print("Your callback may be malformed or outdated as probably the parameters mismatch")
+							logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 					else:
+						logging.debug('Job ended')
 						try:
 							callbacks.job_end(uid, username, time.time() - job_started)
 						except NameError:
-							pass # no callback defined
+							logging.debug('No callback defined for event job_end')
 						except TypeError:
-							print("Your callback may be malformed or outdated as probably the parameters mismatch")
+							logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 					job_active = not job_active
 					last_state_change = time.time()
 			else:
@@ -457,7 +481,9 @@ while True:
 			# user is still logged in (not logged out/machine off) but 1 minute is over
 			if revalidate(): # try to extend session
 				session_valid_until += 60  # extend by one minute
+				logging.debug('Session extended sucessfully')
 			else: # probably not enough credit
+				logging.debug('Could not extend session')
 				logout()
 				try:
 					if job_active:
@@ -465,7 +491,7 @@ while True:
 					else:
 						callbacks.credit_runout(uid, username)
 				except NameError:
-					pass # no callback defined
+					logging.debug('No callback defined for event credit_runout or credit_runout_interrupt')
 				except TypeError:
-					print("Your callback may be malformed or outdated as probably the parameters mismatch")
+					logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 	lock_machine()
