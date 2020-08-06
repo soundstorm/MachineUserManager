@@ -1,6 +1,8 @@
 # MachineUserManager
 NFC based User/Credit Management for machines like Lasercutters, CNCs, etc. in workshops by using a Raspberry Pi.
 
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://www.paypal.me/mittwoch)
+
 ![Login](https://github.com/soundstorm/MachineUserManager/raw/master/images/loggedin.jpg)
 
 ## Use-Case
@@ -11,7 +13,7 @@ And on the other hand to generate revenue or compensate the investments simply b
 If you just want to use the program for access control, just set the cost to zero and you're good to go.
 
 Security would be rated basic to medium, as one may fake the UID of a Mifare Card or at least for Ruida machines disable the machine protection completely.
-If you want to be sure, that the machine cannot be used, add an sufficient relay, which unpowers the whole machine (may be hard to resume interrupted jobs if used with credit).
+If you want to be sure, that the machine cannot be used, add a sufficient relay, which unpowers the whole machine (may be hard to resume interrupted jobs if used with credit).
 I placed the Pi in the control cabinet of my Ruida Laser, which I locked up with a simple lock (which can be jiggled open, so just basic security as said).
 But in a semi-trusted area it works very well.
 
@@ -25,6 +27,17 @@ But in a semi-trusted area it works very well.
   Translations, databases, all interchangable.
 - Multimachine, single user management: By using a central database for management and running the applications on multiple devices (Pis) you can control multiple machines.
 - Upgradeability: The nice thing about open source - just improve the application to fit your needs.
+
+## Requirements
+- Raspberry Pi (any generation will do, zero is be cost effective, but if mounted internally WiFi may be bad, so consider using an OTG-LAN-Adapter)
+- Optocouplers, Resistors, Capacitors (depending on Machine; I used PC817, 1k and 100nF-10uF on a 24V machine)
+- Relay (depending on your setup)
+- PN532 Breakout (switched to I2C Mode)
+- 2004 LCD with PCF8574 Breakout
+- Two buttons
+- Cables
+- Lights, Piezo alarm (optional)
+- Network-Switch (optional, used the original external RJ45 Jack, plugged the end into the switch and cabled the Lasercutter, Pi and IP-Cam into it)
 
 ## Interfacing
 The best way to interact with your machine is to use optocouplers or if neccessary relays.
@@ -105,6 +118,7 @@ I connected all unused wires to GND to improve shielding inside of the Lasercutt
 
 ## Configuration
 All above parameters are also in `config.py`.
+Please create your configuration as `user_config.py` to apply your changes.
 As stated: if you just want basic access control and charge nothing for the usage, simply set `PRICE_ONCE` and `PRICE_MINUTE` to 0. You can also remove the prices from `languages/xx.py` (or better create a file `languages/own.py` and set `GUI_LANGUAGE = 'own'`.
 
 `PRICE_ONCE` is charged when starting a session.
@@ -114,7 +128,7 @@ You can also only set `PRICE_ONCE` to reflect a price for using the machine but 
 The default database creation can be found in `dbscripts/`
 
 ## Callbacks
-You can define callbacks in `user_callbacks.py`.
+You can define your callbacks in `user_callbacks.py`.
 You're responsible to fetch exception within your callback, as the application only handles `NameError` if some callbacks are not defined or `TypeError` when using wrong parameter count.
 The file comes with prewritten functions, ready to use.
 If you need extra functions (e.g. for posting to your used chat solution), just add them right to the file.
