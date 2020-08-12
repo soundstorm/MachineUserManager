@@ -236,7 +236,7 @@ def login():
 	global session_start, session_valid_until
 	if db.change_card_value(uid, -PRICE_ONCE - PRICE_MINUTE):
 		# Update successful so the user had enough credit to login and book at least one minute
-		session_start = time.time()
+		session_start = int(time.time())
 		db.create_session(uid, session_start, -PRICE_ONCE - PRICE_MINUTE)
 		session_valid_until = time.time() + 60
 		return True
