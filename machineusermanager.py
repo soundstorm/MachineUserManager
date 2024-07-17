@@ -22,7 +22,7 @@ except ImportError:
 
 lang = import_module('languages.{}'.format(UI_LANGUAGE))
 db_connector = import_module('dbconnectors.db_{}'.format(DB_TYPE))
-db = db_connector.db_connector(
+db_connector.db_connector.configure(
 	host     = DB_HOST,
 	user     = DB_USER,
 	password = DB_PASSWORD,
@@ -126,7 +126,8 @@ except NameError:
 	machine_is_on = True # No pin for machine power defined, always assume machine is on
 
 uid = 0
-credit = 0
+price_once = 0
+price_minute = 0
 time_remaining = 0
 username = 'OVERRRIDE'
 job_started = 0
@@ -140,8 +141,6 @@ except NameError:
 	OVERRIDE = False
 
 session_active = OVERRIDE
-session_start = 0
-session_valid_until = 0 # Time when session needs to be renewed/revaluated
 
 def set_red_led(state):
 	try:
@@ -210,65 +209,10 @@ def lock_machine():
 	set_green_led(0)
 	set_yellow_led(0)
 
-def get_user_info():
-	global username, credit
-	try:
-		username, credit = db.get_user_info(uid)
-		return True
-	except ValueError:
-		logging.debug('No user found for uid %d', uid)
-
-def check_card():
-	global uid
-	# First check if card is only alias
-	alias_id = db.get_alias(uid)
-	if alias_id is not None:
-		logging.debug('Replacing aliased uid %d with main uid %d', uid, alias_id)
-		uid = alias_id # Replace current card uid by main uid
-	if not get_user_info():
-		return -1
-	return db.is_authorized(uid)
-
-def can_afford():
-	return credit > PRICE_ONCE + PRICE_MINUTE
-
-def login():
-	global session_start, session_valid_until
-	if db.change_card_value(uid, -PRICE_ONCE - PRICE_MINUTE):
-		# Update successful so the user had enough credit to login and book at least one minute
-		session_start = int(time.time())
-		db.create_session(uid, session_start, -PRICE_ONCE - PRICE_MINUTE)
-		session_valid_until = time.time() + 60
-		return True
-	return False
-
-def logout():
-	db.end_session(uid, session_start, int(time.time()))
-	lock_machine()
-
-def revalidate():
-	global uid, session_start
-	if db.change_card_value(uid, -PRICE_MINUTE):
-		# Update successful so the user had enough credit to extend session
-		db.update_session(uid, session_start, -PRICE_MINUTE)
-		return True
-	return False
-
 def countdown(t):
 	for i in range(t):
 		lcd.display_string(str(5 - i), 3, 19)
 		time.sleep(1)
-
-def calculate_time_remaining():
-	global time_remaining, credit, session_active
-	if get_user_info():
-		if PRICE_MINUTE == 0:
-			time_remaining = 999
-		else:
-			time_remaining = ceil((credit - (1 - session_active) * PRICE_ONCE) / PRICE_MINUTE)
-	else:
-		time_remaining = 0
-	return time_remaining
 
 def display_text(arr):
 	i = 0
@@ -280,8 +224,8 @@ def display_text(arr):
 			CARD_DEC         = uid,
 			CREDIT_REMAINING = credit,
 			TIME_REMAINING   = time_remaining,
-			PRICE_ONCE       = PRICE_ONCE if (int(PRICE_ONCE) != PRICE_ONCE) else int(PRICE_ONCE),
-			PRICE_MINUTE     = PRICE_MINUTE if (int(PRICE_MINUTE) != PRICE_MINUTE) else int(PRICE_MINUTE)
+			PRICE_ONCE       = price_once if (int(price_once) != price_once) else int(price_once),
+			PRICE_MINUTE     = price_minute if (int(price_minute) != price_minute) else int(price_minute)
 		) + padding)[:20], i, 0)
 		i += 1
 		if i == 4: # Limit to display lines
@@ -320,8 +264,14 @@ while True:
 			logging.debug('No callback defined for event card_scan')
 		except TypeError:
 			logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
-		r = check_card()
-		if r < 0:
+		session = db_connector.db_connector(uid)
+		username, credit = session.get_user_info()
+		authorized = session.is_authorized()
+		try:
+			job_is_running = GPIO.input(MACHINE_STATE) != INVERT_STATE
+		except NameError:
+			job_is_running = False # No pin for machine state defined, always assume no job is active
+		if username is None:
 			logging.info('Card %d is unknown', uid)
 			try:
 				callbacks.card_unknown(uid)
@@ -331,7 +281,7 @@ while True:
 				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 			display_text(lang.CARD_UNKNOWN)
 			countdown(TIMEOUT_SEC)
-		elif r == 0:
+		elif not authorized:
 			logging.info('Card %d is unauthorized to use this machine', uid)
 			try:
 				callbacks.card_unauthorized(uid, username)
@@ -348,8 +298,8 @@ while True:
 				logging.debug('No callback defined for event card_authorized')
 			except TypeError:
 				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
-			calculate_time_remaining()
-			if can_afford():
+			price_once, price_minute = session.get_rate()
+			if session.can_create_session():
 				display_text(lang.LOGIN)
 				# Reset button states
 				do_cancel = False
@@ -359,7 +309,7 @@ while True:
 						logging.debug('Login was cancelled')
 						break
 					elif do_confirm:
-						if login():
+						if session.create_session():
 							try:
 								callbacks.user_login(uid, username)
 							except NameError:
@@ -408,11 +358,13 @@ while True:
 	do_cancel = False
 	if OVERRIDE and machine_is_on:
 		unlock_machine()
+	time_remaining = -1
 	while (session_active or OVERRIDE) and machine_is_on:
-		calculate_time_remaining() # update variables
-		display_text(lang.LOGGED_IN)
-		while ((session_valid_until >= time.time()) and session_active) or OVERRIDE:
-			if not OVERRIDE:
+		if not OVERRIDE:
+			rem = session.get_remaining_time()
+			if time_remaining != rem:
+				time_remaining = rem
+				display_text(lang.LOGGED_IN)
 				if   time_remaining < 2:
 					set_alarm(1)
 				elif time_remaining <= 10:
@@ -431,67 +383,67 @@ while True:
 						warning_sent = True
 				else:
 					warning_sent = False
-			set_yellow_led(job_active & ((time.time() % 2) < 1))
+		elif time_remaining == -1:
+			time_remaining = 999
+			display_text(lang.LOGGED_IN)
+		set_yellow_led(job_active & ((time.time() % 2) < 1))
 
-			if not machine_is_on:
-				logging.debug('Logout due to turning off the machine')
-				logout()
-				try:
-					callbacks.machine_turn_off()
-				except NameError:
-					logging.debug('No callback defined for event machine_turn_off')
-				except TypeError:
-					logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
-			elif do_cancel and not OVERRIDE:
-				logging.debug('Manual logout triggered')
-				logout()
-				try:
-					callbacks.user_logout(uid, username)
-				except NameError:
-					logging.debug('No callback defined for event user_logout')
-				except TypeError:
-					logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
-			elif job_active != job_is_running:
-				# Manual debouncing as the state signal may trigger when switching the machine off
-				if last_state_change + STATE_DEBOUNCE_TIME < time.time():
-					if not job_active:
-						logging.debug('Job started')
-						job_started = time.time()
-						try:
-							callbacks.job_start(uid, username)
-						except NameError:
-							logging.debug('No callback defined for event job_start')
-						except TypeError:
-							logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
-					else:
-						logging.debug('Job ended')
-						try:
-							callbacks.job_end(uid, username, time.time() - job_started)
-						except NameError:
-							logging.debug('No callback defined for event job_end')
-						except TypeError:
-							logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
-					job_active = not job_active
-					last_state_change = time.time()
-			else:
-				last_state_change = time.time() #reset debounce timer
-				time.sleep(.3) # Reduce CPU load by fewer executions
-
-		if session_active and session_valid_until < time.time():
-			# user is still logged in (not logged out/machine off) but 1 minute is over
-			if revalidate(): # try to extend session
-				session_valid_until += 60  # extend by one minute
-				logging.debug('Session extended sucessfully')
-			else: # probably not enough credit
-				logging.debug('Could not extend session')
-				logout()
-				try:
-					if job_active:
-						callbacks.credit_runout_interrupt(uid, username, time.time() - job_started)
-					else:
-						callbacks.credit_runout(uid, username)
-				except NameError:
-					logging.debug('No callback defined for event credit_runout or credit_runout_interrupt')
-				except TypeError:
-					logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
+		if not session.extend_session():
+			logging.debug('Could not extend session')
+			session.end_session()
+			lock_machine()
+			try:
+				if job_active:
+					callbacks.credit_runout_interrupt(uid, username, time.time() - job_started)
+				else:
+					callbacks.credit_runout(uid, username)
+			except NameError:
+				logging.debug('No callback defined for event credit_runout or credit_runout_interrupt')
+			except TypeError:
+				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
+		elif not machine_is_on:
+			logging.debug('Logout due to turning off the machine')
+			session.end_session()
+			lock_machine()
+			try:
+				callbacks.machine_turn_off()
+			except NameError:
+				logging.debug('No callback defined for event machine_turn_off')
+			except TypeError:
+				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
+		elif do_cancel and not OVERRIDE:
+			logging.debug('Manual logout triggered')
+			session.end_session()
+			lock_machine()
+			try:
+				callbacks.user_logout(uid, username)
+			except NameError:
+				logging.debug('No callback defined for event user_logout')
+			except TypeError:
+				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
+		elif job_active != job_is_running:
+			# Manual debouncing as the state signal may trigger when switching the machine off
+			if last_state_change + STATE_DEBOUNCE_TIME < time.time():
+				if not job_active:
+					logging.debug('Job started')
+					job_started = time.time()
+					try:
+						callbacks.job_start(uid, username)
+					except NameError:
+						logging.debug('No callback defined for event job_start')
+					except TypeError:
+						logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
+				else:
+					logging.debug('Job ended')
+					try:
+						callbacks.job_end(uid, username, time.time() - job_started)
+					except NameError:
+						logging.debug('No callback defined for event job_end')
+					except TypeError:
+						logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
+				job_active = not job_active
+				last_state_change = time.time()
+		else:
+			last_state_change = time.time() #reset debounce timer
+			time.sleep(.3) # Reduce CPU load by fewer executions
 	lock_machine()

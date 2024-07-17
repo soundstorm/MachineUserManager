@@ -1,7 +1,7 @@
 # MachineUserManager
 NFC based User/Credit Management for machines like Lasercutters, CNCs, etc. in workshops by using a Raspberry Pi.
 
-[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://www.paypal.me/mittwoch)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://www.paypal.me/sndstrm)
 
 ![Login](https://github.com/soundstorm/MachineUserManager/raw/master/images/loggedin.jpg)
 
@@ -29,7 +29,7 @@ But in a semi-trusted area it works very well.
 - Upgradeability: The nice thing about open source - just improve the application to fit your needs.
 
 ## Requirements
-- Raspberry Pi (any generation will do, zero is be cost effective, but if mounted internally WiFi may be bad, so consider using an OTG-LAN-Adapter)
+- Raspberry Pi (any generation will do, Zero is cost effective, but if mounted inside a metal framed machine, WiFi may be bad, so consider using an OTG-LAN-Adapter)
 - Optocouplers, Resistors, Capacitors (depending on Machine; I used PC817, 1k and 100nF-10uF on a 24V machine)
 - Relay (depending on your setup)
 - PN532 Breakout (switched to I2C Mode)
