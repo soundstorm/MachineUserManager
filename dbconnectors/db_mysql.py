@@ -87,11 +87,12 @@ class db_connector:
 
 
 	def create_session(self):
-		self.start_time = time.time()
+		self.start_time = int(time.time())
+		self.get_rate()
 		price = self.per_login + self.per_minute
 		try:
 			self.cursor.execute('UPDATE cards SET credit = (credit - %s) WHERE uid = %s AND credit >= %s', (price, self.uid, price))
-			self.cursor.execute('INSERT INTO sessions (uid, machine, start_time, price) VALUES(%s, %s, %s, %s)', (self.uid, self.machine, str(self.start_time), str(price)))
+			self.cursor.execute('INSERT INTO sessions (uid, machine, start_time, price) VALUES(%s, %s, %s, %s)', (self.uid, self.machine, self.start_time, price))
 			self.db.commit()
 			self.check_credit()
 			self.session_valid_until = self.start_time + 60
