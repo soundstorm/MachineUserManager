@@ -36,8 +36,8 @@ def card_scan(uid, **kwargs):
 	''' Called on scanning a card '''
 	pass
 
-def card_unkown(uid, **kwargs):
-	''' Called on scanning an (to the database) unkown card '''
+def card_unknown(uid, **kwargs):
+	''' Called on scanning an (to the database) unknown card '''
 	pass
 
 def card_unauthorized(uid, name, **kwargs):
