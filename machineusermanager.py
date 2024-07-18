@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import logging
-from pn532.api import PN532
-import lcdlib
+from pn532pi import Pn532I2c, Pn532, pn532
+from RPLCD import i2c
 import time
 import RPi.GPIO as GPIO
 from math import ceil
@@ -30,12 +30,15 @@ db_connector.db_connector.configure(
 	machine  = MACHINE_NAME
 )
 
-nfc = PN532()
-nfc.setup()
+pni2c = Pn532I2c(1)
+nfc = Pn532(pni2c)
+nfc.begin()
+nfc.setPassiveActivationRetries(0xFF)
+nfc.SAMConfig()
 
 GPIO.setmode(GPIO.BCM)
 
-lcd = lcdlib.lcd(LCD_ADDR, 4, 20)
+lcd = i2c.CharLCD('PCF8574', 0x27, port=1, charmap='A00', cols=20, rows=4)
 
 do_cancel      = False
 do_confirm     = False
@@ -129,6 +132,7 @@ uid = 0
 price_once = 0
 price_minute = 0
 time_remaining = 0
+credit = 0
 username = 'OVERRRIDE'
 job_started = 0
 last_state_change = 0
@@ -178,19 +182,14 @@ def set_protection(state):
 	GPIO.output(MACHINE_PROT, state == INVERT_PROT)
 	# Don't fetch error here to avoid failing silently
 
-def prepare_reading_tag():
-	nfc.in_list_passive_target() #prepare reading on modified pn532 lib
-
 def read_tag():
-	id_tuple = nfc.read()
-	if id_tuple is not None:
-		tag_uid = 0
-		# Only bytes 5-9 are the really unique part
-		# Generate int from tuple/list
-		for i in id_tuple[5:9]:
+	success, uid_stream = nfc.readPassiveTargetID(pn532.PN532_MIFARE_ISO14443A_106KBPS)
+	tag_uid = 0
+	if success:
+		for i in uid_stream:
 			tag_uid <<= 8
 			tag_uid += i
-		return uid
+		return tag_uid
 	return None
 
 def unlock_machine():
@@ -211,14 +210,16 @@ def lock_machine():
 
 def countdown(t):
 	for i in range(t):
-		lcd.display_string(str(5 - i), 3, 19)
+		lcd.cursor_pos = (3, 19)
+		lcd.write_string(str(5 - i))
 		time.sleep(1)
 
 def display_text(arr):
 	i = 0
-	padding = '                    '
+	padding = ' '*20
 	for line in arr:
-		lcd.display_string((line.format(
+		lcd.cursor_pos = (i, 0)
+		lcd.write_string((line.format(
 			NAME             = username,
 			CARD_HEX         = "{:08x}".format(uid).upper(),
 			CARD_DEC         = uid,
@@ -226,18 +227,19 @@ def display_text(arr):
 			TIME_REMAINING   = time_remaining,
 			PRICE_ONCE       = price_once if (int(price_once) != price_once) else int(price_once),
 			PRICE_MINUTE     = price_minute if (int(price_minute) != price_minute) else int(price_minute)
-		) + padding)[:20], i, 0)
+		) + padding)[:20])
 		i += 1
 		if i == 4: # Limit to display lines
 			break
 	for n in range(i, 4):
-		lcd.display_string(padding, n, 0) # Clear not defined lines
+		lcd.cursor_pos = (n, 0)
+		lcd.write_string(padding) # Clear not defined lines
 
 while True:
 	lock_machine()
 	set_alarm(0)
 	if not machine_is_on:
-		lcd.backlight_off()
+		lcd.backlight_enabled = False
 		lcd.clear()
 		display_text(lang.MACHINE_OFF)
 		while not machine_is_on:
@@ -251,13 +253,13 @@ while True:
 			logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 	while machine_is_on and not session_active and not OVERRIDE:
 		display_text(lang.MACHINE_READY)
-		lcd.backlight_on()
-		prepare_reading_tag()
+		lcd.backlight_enabled = True
 		read_uid = None
-		while machine_is_on and read_uid == 0:
+		while machine_is_on and read_uid == None:
 			read_uid = read_tag()
-		if read_uid is None:
+		if read_uid is None or not machine_is_on:
 			break
+		uid = read_uid
 		try:
 			callbacks.card_scan(uid)
 		except NameError:
