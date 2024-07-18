@@ -32,8 +32,8 @@ class db_connector:
 			database = db_connector.database,
 			port = db_connector.port
 		)
-		self.cursor = self.db.cursor(dictonary=True)
-		self.cursor.execute('SET SESSION TRANSACTION ISOLATION LEVEL COMMITTED')
+		self.cursor = self.db.cursor(dictionary=True)
+		self.cursor.execute('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED')
 		self.cursor.execute('SELECT uid FROM alias WHERE card_id = %s', (uid, ))
 		result = self.cursor.fetchone()
 		if result is not None:
@@ -47,18 +47,19 @@ class db_connector:
 		self.cursor.execute('SELECT name, credit FROM cards WHERE uid = %s', (self.uid, ))
 		try:
 			result = self.cursor.fetchone()
-			self.credit = result['credit']
-			return result['name'], result['credit']
+			self.credit = float(result['credit'])
+			return result['name'], self.credit
 		except:
+			self.credit = 0.0
 			return None, None
-	
+
 	def get_rate(self):
-		self.cursor.execute('SELECT r.per_login, r.per_minute FROM authorization a LEFT JOIN rates r ON a.rate = r.rid WHERE a.uid = %s AND r.machine = %s', (self.uid, self.machine))
+		self.cursor.execute('SELECT r.per_login, r.per_minute FROM authorization a LEFT JOIN rates r ON a.rate = r.rid WHERE a.uid = %s AND a.machine = %s', (self.uid, self.machine))
 		try:
 			result = self.cursor.fetchone()
-			self.per_login = result['per_login']
-			self.per_minute = result['per_minute']
-			return result['per_login'], result['per_minute']
+			self.per_login = float(result['per_login'])
+			self.per_minute = float(result['per_minute'])
+			return self.per_login, self.per_minute
 		except:
 			return None, None
 
@@ -69,22 +70,18 @@ class db_connector:
 			return self.cursor.rowcount != 0
 		except:
 			return False
-	
+
 	def can_create_session(self):
 		price = self.per_login + self.per_minute
-		self.cursor.execute('SELECT credit FROM cards WHERE uid = %s', (self.uid, ))
-		try:
-			result = self.cursor.fetchone()
-			return result['credit'] >= price
-		except:
-			return False
-	
+		self.check_credit()
+		return self.credit >= price
+
 	def check_credit(self):
 		self.cursor.execute('SELECT credit FROM cards WHERE uid = %s', (self.uid, ))
 		try:
 			result = self.cursor.fetchone()
-			self.credit = result['credit']
-			return result['credit']
+			self.credit = float(result['credit'])
+			return self.credit
 		except:
 			return 0
 
@@ -124,14 +121,14 @@ class db_connector:
 		except:
 			self.db.rollback()
 			return False
-		
+
 	def get_remaining_time(self):
 		if self.per_minute is None:
 			return 0
 		elif self.per_minute == 0:
 			return 999
 		else:
-			return (self.credit - (self.per_login if self.session_valid_until == 0 else 0)) / self.per_minute
+			return int((self.credit - (self.per_login if self.session_valid_until == 0 else 0)) / self.per_minute)
 
 	def end_session(self):
 		self.cursor.execute('UPDATE sessions SET end_time = %s WHERE uid = %s AND machine = %s AND start_time = %s', (int(time.time()), self.uid, self.machine, self.start_time))
