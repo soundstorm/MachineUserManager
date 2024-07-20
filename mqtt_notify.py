@@ -14,14 +14,16 @@ class MqttNotify():
 		for i in range(1,6):
 			MAC = '%s:%s' % (MAC[:i * 3 - 1], MAC[i * 3 - 1:])
 		settings = Settings.MQTT(host=kwargs['host'], username=ValueOrListItem(kwargs,'username', None), password=ValueOrListItem(kwargs,'password', None))
+		devname = ValueOrListItem(kwargs, 'name', 'MachineUserManager')
+		devid = devname.replace(' ','_').replace('-','_')
 		device = DeviceInfo(name=ValueOrListItem(kwargs, 'name', 'MachineUserManager'), manufacturer=ValueOrListItem(kwargs, 'manufacturer', 'sndstrm'), model=ValueOrListItem(kwargs, 'model', 'MachineUserManager'), identifiers=MAC)
-		self.powerSensor = BinarySensor(Settings(mqtt=settings, entity=BinarySensorInfo(name='Power', unique_id='power', device_class='power', device=device)))
+		self.powerSensor = BinarySensor(Settings(mqtt=settings, entity=BinarySensorInfo(name='Power', unique_id=devid+'_power', device_class='power', device=device)))
 		self.powerSensor.off()
-		self.loginSensor = BinarySensor(Settings(mqtt=settings, entity=BinarySensorInfo(name='Logged In', unique_id='loggedin', device_class='lock', device=device)))
+		self.loginSensor = BinarySensor(Settings(mqtt=settings, entity=BinarySensorInfo(name='Logged In', unique_id=devid+'_loggedin', device_class='lock', device=device)))
 		self.loginSensor.off()
-		self.stateSensor = BinarySensor(Settings(mqtt=settings, entity=BinarySensorInfo(name='State', unique_id='state', device_class='running', device=device)))
+		self.stateSensor = BinarySensor(Settings(mqtt=settings, entity=BinarySensorInfo(name='State', unique_id=devid+'_state', device_class='running', device=device)))
 		self.stateSensor.off()
-		self.remainingSensor = Sensor(Settings(mqtt=settings, entity=SensorInfo(name='Remaining', unique_id='remaining', device_class='duration', unit_of_measurement='min', device=device)))
+		self.remainingSensor = Sensor(Settings(mqtt=settings, entity=SensorInfo(name='Remaining', unique_id=devid+'_remaining', device_class='duration', unit_of_measurement='min', device=device)))
 		self.remainingSensor.set_state(0)
 	
 	def setPower(self, state : bool):
