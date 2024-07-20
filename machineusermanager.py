@@ -8,6 +8,7 @@ import time
 import RPi.GPIO as GPIO
 from math import ceil
 from importlib import import_module
+from mqtt_notify import MqttNotify
 import callbacks
 try:
 	import user_callbacks as callbacks
@@ -39,6 +40,12 @@ nfc.SAMConfig()
 GPIO.setmode(GPIO.BCM)
 
 lcd = i2c.CharLCD('PCF8574', 0x27, port=1, charmap='A00', cols=20, rows=4)
+
+notify = None
+try:
+	notify = MqttNotify(host=MQTT_HOST, username=MQTT_USERNAME, password=MQTT_PASSWORD, name=MQTT_DEVICE, manufacturer=MQTT_MFC, model=MQTT_MODEL)
+except NameError:
+	logging.info('MQTT_HOST not defined, not setting up MQTT notifier.')
 
 do_cancel      = False
 do_confirm     = False
@@ -146,11 +153,11 @@ except NameError:
 
 session_active = OVERRIDE
 
-def set_red_led(state):
+def set_red_led(state : bool):
 	try:
 		GPIO.output(LED_R, state != INVERT_LEDS)
 	except NameError:
-		logging.info('No pin defined for LED_R or INVERT_LEDs not set')
+		logging.info('No pin defined for LED_R or INVERT_LEDS not set')
 	except Exception as e:
 		logging.exception('Error while setting pin LED_R')
 
@@ -158,19 +165,33 @@ def set_yellow_led(state):
 	try:
 		GPIO.output(LED_Y, state != INVERT_LEDS)
 	except NameError:
-		logging.info('No pin defined for LED_Y or INVERT_LEDs not set')
+		logging.info('No pin defined for LED_Y or INVERT_LEDS not set')
 	except Exception as e:
 		logging.exception('Error while setting pin LED_Y')
 
-def set_green_led(state):
+def set_green_led(state : bool):
 	try:
 		GPIO.output(LED_G, state != INVERT_LEDS)
 	except NameError:
-		logging.info('No pin defined for LED_G or INVERT_LEDs not set')
+		logging.info('No pin defined for LED_G or INVERT_LEDS not set')
 	except Exception:
 		logging.exception('Error while setting pin LED_G')
 
-def set_alarm(state):
+def set_button_leds(confirm : bool, cancel : bool):
+	try:
+		GPIO.output(LED_CONFIRM, confirm != INVERT_BUTTON_LEDS)
+	except NameError:
+		logging.info('No pin defined for LED_CONFIRM or INVERT_BUTTON_LED not set')
+	except Exception:
+		logging.exception('Error while setting pin LED_CONFIRM')
+	try:
+		GPIO.output(LED_CANCEL, cancel != INVERT_BUTTON_LEDS)
+	except NameError:
+		logging.info('No pin defined for LED_CANCEL or INVERT_BUTTON_LED not set')
+	except Exception:
+		logging.exception('Error while setting pin LED_CANCEL')
+
+def set_alarm(state : bool):
 	try:
 		GPIO.output(ALARM, state != INVERT_ALARM)
 	except NameError:
@@ -178,7 +199,7 @@ def set_alarm(state):
 	except Exception:
 		logging.exception('Error while setting pin ALARM')
 
-def set_protection(state):
+def set_protection(state : bool):
 	GPIO.output(MACHINE_PROT, state == INVERT_PROT)
 	# Don't fetch error here to avoid failing silently
 
@@ -238,7 +259,14 @@ def display_text(arr):
 while True:
 	lock_machine()
 	set_alarm(0)
+	set_button_leds(False, False)
+	if notify is not None:
+		notify.setLoggedIn(False)
+		notify.setRemaining(0)
 	if not machine_is_on:
+		if notify is not None:
+			notify.setPower(False)
+			notify.setState(False)
 		lcd.backlight_enabled = False
 		lcd.clear()
 		display_text(lang.MACHINE_OFF)
@@ -251,6 +279,8 @@ while True:
 			logging.debug('No callback defined for event machine_turn_on')
 		except TypeError:
 			logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
+		if notify is not None:
+			notify.setPower(True)
 	while machine_is_on and not session_active and not OVERRIDE:
 		display_text(lang.MACHINE_READY)
 		lcd.backlight_enabled = True
@@ -273,6 +303,8 @@ while True:
 			job_is_running = GPIO.input(MACHINE_STATE) != INVERT_STATE
 		except NameError:
 			job_is_running = False # No pin for machine state defined, always assume no job is active
+		if notify is not None:
+			notify.setState(job_is_running)
 		if username is None:
 			logging.info('Card %d is unknown', uid)
 			try:
@@ -306,11 +338,13 @@ while True:
 				# Reset button states
 				do_cancel = False
 				do_confirm = False
+				set_button_leds(True, True)
 				while machine_is_on:
 					if do_cancel:
 						logging.debug('Login was cancelled')
 						break
 					elif do_confirm:
+						set_button_leds(False, True)
 						if session.create_session():
 							try:
 								callbacks.user_login(uid, username)
@@ -318,6 +352,8 @@ while True:
 								logging.debug('No callback defined for event user_login')
 							except TypeError:
 								logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
+							if notify is not None:
+								notify.setLoggedIn(True)
 							if job_is_running:
 								if job_started == 0:
 									job_started = time.time()
@@ -365,6 +401,8 @@ while True:
 		if not OVERRIDE:
 			rem = session.get_remaining_time()
 			if time_remaining != rem:
+				if notify is not None:
+					notify.setRemaining(rem)
 				time_remaining = rem
 				display_text(lang.LOGGED_IN)
 				if   time_remaining < 2:
@@ -387,6 +425,8 @@ while True:
 					warning_sent = False
 		elif time_remaining == -1:
 			time_remaining = 999
+			if notify is not None:
+				notify.setRemaining(time_remaining)
 			display_text(lang.LOGGED_IN)
 		set_yellow_led(job_active & ((time.time() % 2) < 1))
 
@@ -424,6 +464,8 @@ while True:
 			except TypeError:
 				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 		elif job_active != job_is_running:
+			if notify is not None:
+				notify.setState(job_is_running)
 			# Manual debouncing as the state signal may trigger when switching the machine off
 			if last_state_change + STATE_DEBOUNCE_TIME < time.time():
 				if not job_active:

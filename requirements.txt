@@ -1,3 +1,6 @@
 mysql-connector-python
 rpi-lgpio
 pn532pi
+RPLCD
+smbus2
+ha-mqtt-discoverable

@@ -18,6 +18,14 @@ DB_USER       = 'machine'
 DB_PASSWORD   = 'password'
 DB_DATABASE   = 'machines'
 
+# If you want to expose sensors to Home Assistant via MQTT, define a host
+#MQTT_HOST     = 'localhost'
+MQTT_USERNAME = None
+MQTT_PASSWORD = None
+MQTT_DEVICE   = 'MachineUserManager'
+MQTT_MFC      = 'sndstrm'
+MQTT_MODEL    = 'MachineUserManager'
+
 MACHINE_NAME  = 'lasercutter' # must be in your database
 # you can use any kind of identifier
 
@@ -36,12 +44,13 @@ LCD_ADDR    = 0x27 # PCF8574 Expander
 TIMEOUT_SEC = 5    # Warning/Error timeout on display
 
 # Invert on = active low
-INVERT_BUTTONS = True
-INVERT_LEDS    = False
-INVERT_ALARM   = False
-INVERT_STATE   = False
-INVERT_POWER   = True
-INVERT_PROT    = False
+INVERT_BUTTONS    = True
+INVERT_BUTTON_LED = False
+INVERT_LEDS       = False
+INVERT_ALARM      = False
+INVERT_STATE      = False
+INVERT_POWER      = True
+INVERT_PROT       = False
 
 # State pin might trigger before power on is off
 # This will lead to false callbacks when turning machine off while logged in 
@@ -88,5 +97,5 @@ MACHINE_PROT  = 24 # 18
 #             = 12 # 32
 #       GND   =    # 34
 #             = 16 # 36
-#             = 20 # 38
-#             = 21 # 40
+#LED_CONFIRM  = 20 # 38
+#LED_CANCEL   = 21 # 40
