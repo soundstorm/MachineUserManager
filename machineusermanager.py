@@ -279,8 +279,8 @@ while True:
 			logging.debug('No callback defined for event machine_turn_on')
 		except TypeError:
 			logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
-		if notify is not None:
-			notify.setPower(True)
+	if notify is not None:
+		notify.setPower(True)
 	while machine_is_on and not session_active and not OVERRIDE:
 		display_text(lang.MACHINE_READY)
 		lcd.backlight_enabled = True
@@ -296,9 +296,14 @@ while True:
 			logging.debug('No callback defined for event card_scan')
 		except TypeError:
 			logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
-		session = db_connector.db_connector(uid)
-		username, credit = session.get_user_info()
-		authorized = session.is_authorized()
+		try:
+			session = db_connector.db_connector(uid)
+			username, credit = session.get_user_info()
+			authorized = session.is_authorized()
+		except:
+			display_text(lang.DB_UNAVAILABLE)
+			countdown(TIMEOUT_SEC)
+			break
 		try:
 			job_is_running = GPIO.input(MACHINE_STATE) != INVERT_STATE
 		except NameError:
@@ -333,6 +338,10 @@ while True:
 			except TypeError:
 				logging.exception('Your callback may be malformed or outdated as probably the parameters mismatch')
 			price_once, price_minute = session.get_rate()
+			if price_once is None:
+				price_once = PRICE_ONCE # Fallback to defaults
+			if price_minute is None:
+				price_minute = PRICE_MINUTE # Fallback to defaults
 			if session.can_create_session():
 				display_text(lang.LOGIN)
 				# Reset button states

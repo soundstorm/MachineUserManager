@@ -81,3 +81,10 @@ LOGGED_IN = [
 	'{TIME_REMAINING} Min'
 ]
 
+DB_UNAVAILABLE = [
+	#01234567890123456789
+	'Datenbase currently',
+	'unavailable.',
+	'Please try again',
+	'later.'
+]
