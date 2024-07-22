@@ -10,7 +10,7 @@ START TRANSACTION;
 CREATE TABLE `cards` (
   `uid` bigint(20) NOT NULL,
   `name` varchar(40) NOT NULL DEFAULT 'No Name',
-  `value` float(10,2) NOT NULL DEFAULT 0.00
+  `value` decimal(10,2) unsigned NOT NULL DEFAULT 0.00
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 ALTER TABLE `cards`
@@ -27,17 +27,10 @@ CREATE TABLE `alias` (
   `card_id` bigint(20) NOT NULL,
   `uid` bigint(20) NOT NULL,
   `comment` varchar(30) NOT NULL
+  PRIMARY KEY (`card_id`),
+  CONSTRAINT `alias_ibfk_1` FOREIGN KEY (`uid`) REFERENCES `cards` (`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-ALTER TABLE `alias`
-  ADD PRIMARY KEY (`card_id`),
-  ADD KEY `alias_ibfk_1` (`uid`);
-
-ALTER TABLE `alias`
-  ADD CONSTRAINT `alias_ibfk_1` FOREIGN KEY (`uid`) REFERENCES `cards` (`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
 COMMIT;
-
-
 
 /*
   Machines Table - if using multiple machines with different authorization levels.
@@ -46,13 +39,21 @@ COMMIT;
 START TRANSACTION;
 CREATE TABLE `machines` (
   `name` varchar(40) NOT NULL
+  PRIMARY KEY (`name`);
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-ALTER TABLE `machines`
-  ADD PRIMARY KEY (`name`);
 COMMIT;
 
-
+/*
+  Rates for different prices associated with an authorization per person and machine
+*/
+START TRANSACTION;
+CREATE TABLE `rates` (
+  `rid` varchar(20) NOT NULL,
+  `per_login` decimal(5,2) unsigned NOT NULL DEFAULT 0.00,
+  `per_minute` decimal(5,2) unsigned NOT NULL DEFAULT 0.00,
+  PRIMARY KEY (`rid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+COMMIT;
 
 /*
   Sessions table, mostly for documentation of the usage by a certain person.
@@ -60,26 +61,19 @@ COMMIT;
 */
 START TRANSACTION;
 CREATE TABLE `sessions` (
-  `bid` int(11),
+  `bid` int(11) NOT NULL AUTO_INCREMENT,
   `uid` bigint(20) DEFAULT NULL,
   `machine` varchar(40) DEFAULT NULL,
-  `start_time` int(11) NOT NULL DEFAULT '0',
+  `start_time` int(11) NOT NULL DEFAULT 0,
   `end_time` int(11) DEFAULT NULL,
-  `price` decimal(6,2) NOT NULL DEFAULT '0.0'
+  `price` decimal(6,2) NOT NULL DEFAULT 0.00,
+  PRIMARY KEY (`bid`),
+  KEY `quicksel` (`uid`,`machine`,`start_time`),
+  KEY `sessions_ibfk_1` (`machine`),
+  KEY `sessions_ibfk_2` (`uid`),
+  CONSTRAINT `sessions_ibfk_1` FOREIGN KEY (`machine`) REFERENCES `machines` (`name`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `sessions_ibfk_2` FOREIGN KEY (`uid`) REFERENCES `cards` (`uid`) ON DELETE SET NULL ON UPDATE CASCADE,
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-ALTER TABLE `sessions`
-  ADD PRIMARY KEY (`bid`),
-  ADD KEY `quicksel` (`uid`, `machine`, `start_time`),
-  ADD KEY `sessions_ibfk_1` (`machine`),
-  ADD KEY `sessions_ibfk_2` (`uid`);
-
-ALTER TABLE `sessions`
-  MODIFY `bid` int(11) NOT NULL AUTO_INCREMENT;
-  
-ALTER TABLE `sessions`
-  ADD CONSTRAINT `sessions_ibfk_1` FOREIGN KEY (`machine`) REFERENCES `machines` (`name`) ON DELETE SET NULL ON UPDATE CASCADE,
-  ADD CONSTRAINT `sessions_ibfk_2` FOREIGN KEY (`uid`) REFERENCES `cards` (`uid`) ON DELETE SET NULL ON UPDATE CASCADE;
 COMMIT;
 
 
@@ -89,14 +83,11 @@ COMMIT;
 START TRANSACTION;
 CREATE TABLE `authorization` (
   `uid` bigint(20) NOT NULL,
-  `machine` varchar(40) NOT NULL
+  `machine` varchar(40) NOT NULL,
+  `rate` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`uid`,`machine`),
+  CONSTRAINT `authorization_ibfk_1` FOREIGN KEY (`machine`) REFERENCES `machines` (`name`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `authorization_ibfk_2` FOREIGN KEY (`uid`) REFERENCES `cards` (`uid`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `authorization_ibfk_3` FOREIGN KEY (`rate`) REFERENCES `rates` (`rid`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-ALTER TABLE `authorization`
-  ADD PRIMARY KEY (`uid`,`machine`),
-  ADD KEY `authorization_ibfk_1` (`machine`);
-  
-ALTER TABLE `authorization`
-  ADD CONSTRAINT `authorization_ibfk_1` FOREIGN KEY (`machine`) REFERENCES `machines` (`name`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `authorization_ibfk_2` FOREIGN KEY (`uid`) REFERENCES `cards` (`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
 COMMIT;
