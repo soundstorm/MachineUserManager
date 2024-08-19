@@ -92,7 +92,7 @@ class db_connector:
 		price = self.per_login + self.per_minute
 		try:
 			self.cursor.execute('UPDATE cards SET credit = (credit - %s) WHERE uid = %s AND credit >= %s', (price, self.uid, price))
-			self.cursor.execute('INSERT INTO sessions (uid, machine, start_time, price) VALUES(%s, %s, %s, %s)', (self.uid, self.machine, self.start_time, price))
+			self.cursor.execute('INSERT INTO sessions (uid, machine, start_time, price) VALUES(%s, %s, %s, %s)', (self.uid, self.machine, self.start_time, -price))
 			self.db.commit()
 			self.check_credit()
 			self.session_valid_until = self.start_time + 60
@@ -114,7 +114,7 @@ class db_connector:
 		price = self.per_minute
 		try:
 			self.cursor.execute('UPDATE cards SET credit = (credit - %s) WHERE uid = %s AND credit >= %s', (price, self.uid, price))
-			self.cursor.execute('UPDATE sessions SET price = price + %s WHERE uid = %s AND machine = %s AND start_time = %s', (price, self.uid, self.machine, self.start_time))
+			self.cursor.execute('UPDATE sessions SET price = (price - %s) WHERE uid = %s AND machine = %s AND start_time = %s', (price, self.uid, self.machine, self.start_time))
 			self.db.commit()
 			self.check_credit()
 			self.session_valid_until += 60
