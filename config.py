@@ -44,13 +44,13 @@ LCD_ADDR    = 0x27 # PCF8574 Expander
 TIMEOUT_SEC = 5    # Warning/Error timeout on display
 
 # Invert on = active low
-INVERT_BUTTONS    = True
-INVERT_BUTTON_LED = False
-INVERT_LEDS       = False
-INVERT_ALARM      = False
-INVERT_STATE      = False
-INVERT_POWER      = True
-INVERT_PROT       = False
+INVERT_BUTTONS     = True
+INVERT_BUTTON_LEDS = False
+INVERT_LEDS        = False
+INVERT_ALARM       = False
+INVERT_STATE       = False
+INVERT_POWER       = True
+INVERT_PROT        = False
 
 # State pin might trigger before power on is off
 # This will lead to false callbacks when turning machine off while logged in 

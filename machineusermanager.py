@@ -100,6 +100,14 @@ except NameError:
 	logging.info('No GPIO defined for MACHINE_ON')
 GPIO.setup(BTN_CONFIRM, GPIO.IN, GPIO.PUD_UP)
 GPIO.setup(BTN_CANCEL, GPIO.IN, GPIO.PUD_UP)
+try:
+	GPIO.setup(LED_CANCEL, GPIO.OUT)
+except NameError:
+	logging.info('No GPIO defined for LED_CANCEL')
+try:
+	GPIO.setup(LED_CONFIRM, GPIO.OUT)
+except NameError:
+	logging.info('No GPIO defined for LED_CONFIRM')
 
 logging.debug('Configuring interrupt routines')
 
