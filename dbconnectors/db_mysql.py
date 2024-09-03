@@ -44,10 +44,10 @@ class db_connector:
 		self.credit = 0
 
 	def get_user_info(self):
-		self.cursor.execute('SELECT name, credit FROM cards WHERE uid = %s', (self.uid, ))
+		self.cursor.execute('SELECT name, value FROM cards WHERE uid = %s', (self.uid, ))
 		try:
 			result = self.cursor.fetchone()
-			self.credit = float(result['credit'])
+			self.credit = float(result['value'])
 			return result['name'], self.credit
 		except:
 			self.credit = 0.0
@@ -77,10 +77,10 @@ class db_connector:
 		return self.credit >= price
 
 	def check_credit(self):
-		self.cursor.execute('SELECT credit FROM cards WHERE uid = %s', (self.uid, ))
+		self.cursor.execute('SELECT value FROM cards WHERE uid = %s', (self.uid, ))
 		try:
 			result = self.cursor.fetchone()
-			self.credit = float(result['credit'])
+			self.credit = float(result['value'])
 			return self.credit
 		except:
 			return 0
@@ -91,7 +91,7 @@ class db_connector:
 		self.get_rate()
 		price = self.per_login + self.per_minute
 		try:
-			self.cursor.execute('UPDATE cards SET credit = (credit - %s) WHERE uid = %s AND credit >= %s', (price, self.uid, price))
+			self.cursor.execute('UPDATE cards SET value = (value - %s) WHERE uid = %s AND value >= %s', (price, self.uid, price))
 			self.cursor.execute('INSERT INTO sessions (uid, machine, start_time, price) VALUES(%s, %s, %s, %s)', (self.uid, self.machine, self.start_time, -price))
 			self.db.commit()
 			self.check_credit()
@@ -113,7 +113,7 @@ class db_connector:
 			return True
 		price = self.per_minute
 		try:
-			self.cursor.execute('UPDATE cards SET credit = (credit - %s) WHERE uid = %s AND credit >= %s', (price, self.uid, price))
+			self.cursor.execute('UPDATE cards SET value = (value - %s) WHERE uid = %s AND value >= %s', (price, self.uid, price))
 			self.cursor.execute('UPDATE sessions SET price = (price - %s) WHERE uid = %s AND machine = %s AND start_time = %s', (price, self.uid, self.machine, self.start_time))
 			self.db.commit()
 			self.check_credit()
