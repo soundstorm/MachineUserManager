@@ -44,7 +44,7 @@ class db_connector:
 		self.credit = 0
 
 	def get_user_info(self):
-		self.cursor.execute('SELECT name, value FROM cards WHERE uid = %s', (self.uid, ))
+		self.cursor.execute('SELECT IF(name IS NULL OR name = "", HEX(CAST(uid AS UNSIGNED)), name) as name, value FROM cards WHERE uid = %s', (self.uid, ))
 		try:
 			result = self.cursor.fetchone()
 			self.credit = float(result['value'])
@@ -64,7 +64,7 @@ class db_connector:
 			return None, None
 
 	def is_authorized(self):
-		self.cursor.execute('SELECT COUNT(uid) FROM authorization WHERE uid = %s AND machine = %s', (self.uid, self.machine))
+		self.cursor.execute('SELECT uid FROM authorization WHERE uid = %s AND machine = %s', (self.uid, self.machine))
 		try:
 			self.cursor.fetchone()
 			return self.cursor.rowcount != 0
