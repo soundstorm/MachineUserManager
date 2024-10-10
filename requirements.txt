@@ -1,6 +1,6 @@
 mysql-connector-python
 rpi-lgpio
-pn532pi
+pn532pi >= 1.7
 RPLCD
 smbus2
 ha-mqtt-discoverable
